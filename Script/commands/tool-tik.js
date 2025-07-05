@@ -4,67 +4,75 @@ const path = require("path");
 
 module.exports.config = {
   name: "تيك",
-  version: "1.0.0",
-  hasPermssion: "0",
-  credits: "Kim Joseph DG Bien - Modified",
-  description: "قم بالبحث عن فيديو في التيك توك",
+  version: "2.0.0",
+  hasPermssion: 0,
+  credits: "Kim Joseph DG Bien - Modified by Houssin",
+  description: "ابحث عن فيديوهات التيك توك",
   commandCategory: "وسائط",
-  usage: "[تيك <إسم البحث>]",
+  usage: "[تيك <كلمة البحث>]",
   cooldowns: 5,
 };
 
 module.exports.run = async function({ api, event, args }) {
   try {
-    const searchQuery = args.join(" ");
-    if (!searchQuery) {
-      api.sendMessage("📋 | الإستخدام: تيك <نص البحث>", event.threadID);
-      return;
+    const query = args.join(" ");
+    if (!query) {
+      return api.sendMessage("📋 | الإستخدام: تيك <كلمة البحث>", event.threadID, event.messageID);
     }
 
-    const initialMessageID = await new Promise((resolve) =>
-      api.sendMessage("⏱️ | جاري البحث المرجو الإنتظار...", event.threadID, (err, info) => {
+    const loadingMessage = await new Promise((resolve) => {
+      api.sendMessage("⏱️ | جاري البحث، يرجى الإنتظار...", event.threadID, (err, info) => {
         if (info) resolve(info.messageID);
-      })
-    );
+      });
+    });
 
-    const response = await axios.get(`https://c-v1.onrender.com/tiksearch?query=${encodeURIComponent(searchQuery)}`);
-    const videos = response.data.data.videos;
+    const res = await axios.get(`https://hiroshi-api.onrender.com/tiktok/search?q=${encodeURIComponent(query)}`);
+    const videos = res.data?.data?.videos;
 
     if (!videos || videos.length === 0) {
-      api.setMessageReaction("❌", initialMessageID, (err) => {}, true);
-      api.sendMessage("لم يتم العثور على مقاطع فيديو لما قمت بإدخاله.", event.threadID);
-      return;
+      api.setMessageReaction("❌", loadingMessage, () => {}, true);
+      return api.sendMessage("❌ | لم يتم العثور على أي فيديو.", event.threadID, loadingMessage);
     }
 
-    const videoData = videos[0];
-    const videoUrl = videoData.play;
+    const video = videos[0];
+    const videoUrl = video.play;
+    const message = 
+`✅ | نتيجة البحث:
 
-    const message = `✅ | نـتيجـة الـبـحـث :\n\n👤 | مـن طـرف : ${videoData.author.nickname}\n🆔 | الـمـسـتـخـدم : ${videoData.author.unique_id}\n\n📄 | الـعـنـوان: ${videoData.title}\n\n💖 | الإعـجـابـات: ${videoData.digg_count}\n🗨️ | الـتـعـلـيـقـات: ${videoData.comment_count}\n🔁 | الـمـشـاركـات: ${videoData.share_count}`;
+👤 | الاسم: ${video.author.nickname}
+🆔 | المعرف: ${video.author.unique_id}
 
-    const filePath = path.join(__dirname, `/cache/tiktok_video.mp4`);
+📄 | العنوان: ${video.title}
+💖 | إعجابات: ${video.digg_count}
+🗨️ | تعليقات: ${video.comment_count}
+🔁 | مشاركات: ${video.share_count}
+▶️ | مشاهدات: ${video.play_count}
+`;
+
+    const filePath = path.join(__dirname, "cache", `tiktok_${Date.now()}.mp4`);
     const writer = fs.createWriteStream(filePath);
 
-    const videoResponse = await axios({
-      method: 'get',
+    const videoStream = await axios({
+      method: "GET",
       url: videoUrl,
-      responseType: 'stream'
+      responseType: "stream",
     });
 
-    videoResponse.data.pipe(writer);
+    videoStream.data.pipe(writer);
 
-    writer.on('finish', () => {
-      api.sendMessage(
-        { body: message, attachment: fs.createReadStream(filePath) },
-        event.threadID,
-        () => {
-          fs.unlinkSync(filePath);
-          api.setMessageReaction("✅", initialMessageID, (err) => {}, true);
-          api.unsendMessage(initialMessageID); // Delete initial search message
-        }
-      );
+    writer.on("finish", () => {
+      api.sendMessage({
+        body: message,
+        attachment: fs.createReadStream(filePath),
+      }, event.threadID, () => {
+        fs.unlinkSync(filePath);
+        api.setMessageReaction("✅", loadingMessage, () => {}, true);
+        api.unsendMessage(loadingMessage);
+      });
     });
-  } catch (error) {
-    console.error('Error:', error);
-    api.sendMessage("حدث خطأ أثناء معالجة الطلب.", event.threadID);
+
+  } catch (err) {
+    console.error(err);
+    api.sendMessage("حدث خطأ أثناء البحث أو التحميل. حاول مجددًا لاحقًا.", event.threadID, event.messageID);
   }
 };
