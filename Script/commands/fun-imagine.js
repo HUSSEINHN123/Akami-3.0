@@ -1,3 +1,6 @@
+const axios = require('axios');
+const fs = require('fs-extra');
+
 module.exports.config = {
   name: "تخيل",
   version: "1.0",
@@ -10,8 +13,6 @@ module.exports.config = {
 };
 
 module.exports.run = async ({ api, event, args }) => {
-  const axios = require('axios');
-  const fs = require('fs-extra');
   let { threadID, messageID } = event;
   let query = args.join(" ");
   
@@ -20,13 +21,15 @@ module.exports.run = async ({ api, event, args }) => {
   api.setMessageReaction("⏱️", event.messageID, (err) => {}, true); // Add wait reaction
 
   try {
-    // Translate the query to English
-    const translationResponse = await axios.get(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(query)}`);
-    const translation = translationResponse.data[0][0][0];
+    // استخدام الرابط الجديد مباشرة مع النص العربي
+    const response = await axios.get(`https://my-api-show.vercel.app/api/poli?prompt=${encodeURIComponent(query)}`);
     
-    // Fetch the image based on the translated text
-    const response = await axios.get(`https://jerome-web.gleeze.com/service/api/bing?prompt=${encodeURIComponent(translation)}`);
-    const imageUrl = response.data.result[Math.floor(Math.random() * response.data.result.length)];
+    // التأكد من أن الاستجابة تحتوي على بيانات صحيحة
+    if (!response.data || !response.data.imageUrls || response.data.imageUrls.length === 0) {
+      return api.sendMessage("⚠️ | لم يتم العثور على صور للطلب المطلوب.", threadID, messageID);
+    }
+    
+    const imageUrl = response.data.imageUrls[Math.floor(Math.random() * response.data.imageUrls.length)];
 
     let path = __dirname + `/cache/imagination.png`;
     
@@ -36,7 +39,8 @@ module.exports.run = async ({ api, event, args }) => {
 
     // Send the image with a completion reaction
     api.sendMessage({
-      body: "◆❯━━━━━▣✦▣━━━━━━❮◆\n✅ | تـفـضـل تـخـيـلـك:\n◆❯━━━━━▣✦▣━━━━━━❮◆",
+      body: "✿━━━━━━━━━━━━━━━✿
+ \n[✅] | تـم تـولـيـد الـصـورة بـنـجـاح :\n✿━━━━━━━━━━━━━━━✿",
       attachment: fs.createReadStream(path)
     }, threadID, () => {
       fs.unlinkSync(path);
@@ -44,6 +48,7 @@ module.exports.run = async ({ api, event, args }) => {
     }, messageID);
 
   } catch (error) {
-    api.sendMessage("⚠️ |حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقاً.", threadID, messageID);
+    console.error(error);
+    api.sendMessage("⚠️ | حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقاً.", threadID, messageID);
   }
 };
