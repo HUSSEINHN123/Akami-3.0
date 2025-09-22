@@ -16,15 +16,15 @@ module.exports.config = {
 module.exports.handleReply = async function ({ api, event, handleReply }) {
   try {
     const selectedVideo = handleReply.searchResults[event.body - 1];
-    const videoUrl = selectedVideo.url;
-    const title = selectedVideo.title;
+    const videoId = selectedVideo.id.videoId;
+    const title = selectedVideo.snippet.title;
 
     api.sendMessage(`⏱️ | جاري تنزيل الفيديو: ${title}\nقد يستغرق هذا بعض الوقت، يرجى الانتظار...`, event.threadID, async (err, info) => {
       setTimeout(() => api.unsendMessage(info.messageID), 20000);
     });
 
     // رابط التنزيل الجديد
-    const res = await axios.get(`https://nayan-video-downloader.vercel.app/alldown?url=${encodeURIComponent(videoUrl)}`);
+    const res = await axios.get(`https://nayan-video-downloader.vercel.app/alldown?url=https://www.youtube.com/watch?v=${videoId}`);
     const downloadLink = res.data.data.high;
 
     const filePath = `${__dirname}/cache/video.mp4`;
@@ -49,6 +49,7 @@ module.exports.handleReply = async function ({ api, event, handleReply }) {
       });
 
   } catch (e) {
+    console.error(e);
     api.sendMessage("⛔ | حدث خطأ أثناء تنفيذ الطلب!", event.threadID);
   }
 };
@@ -57,11 +58,12 @@ module.exports.run = async function ({ api, event, args }) {
   if (!args[0]) return api.sendMessage("⚠️ | يرجى إدخال اسم الفيديو للبحث.", event.threadID, event.messageID);
 
   const query = args.join(" ");
-  const apiUrl = `https://rapido.zetsu.xyz/api/ytsearch?query=${encodeURIComponent(query)}`;
+  const apiKey = "AIzaSyC_CVzKGFtLAqxNdAZ_EyLbL0VRGJ-FaMU"; // مفتاح API
+  const apiUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&key=${apiKey}&type=video&maxResults=6`;
 
   try {
     const res = await axios.get(apiUrl);
-    const results = res.data.data;
+    const results = res.data.items;
 
     if (!results.length) return api.sendMessage("❌ | لم يتم العثور على أي نتائج.", event.threadID, event.messageID);
 
@@ -72,9 +74,13 @@ module.exports.run = async function ({ api, event, args }) {
 
     for (let i = 0; i < searchResults.length; i++) {
       const result = searchResults[i];
-      message += `${i + 1}. ${result.title}\nالمدة: ${result.duration}\nالمشاهدات: ${result.views}\n--------------------------\n`;
+      const title = result.snippet.title;
+      const channelTitle = result.snippet.channelTitle;
+      
+      message += `${i + 1}. ${title}\nالقناة: ${channelTitle}\n--------------------------\n`;
 
-      const imageBuffer = await axios.get(result.imgSrc, { responseType: 'arraybuffer' });
+      const imageUrl = result.snippet.thumbnails.high.url;
+      const imageBuffer = await axios.get(imageUrl, { responseType: 'arraybuffer' });
       const imagePath = `${__dirname}/cache/thumb_${i + 1}.jpg`;
       writeFileSync(imagePath, Buffer.from(imageBuffer.data, 'utf-8'));
       attachments.push(createReadStream(imagePath));
@@ -94,17 +100,20 @@ module.exports.run = async function ({ api, event, args }) {
           searchResults
         });
 
-        // حذف الصور المؤقتة
-        attachments.forEach((file, idx) => {
-          try {
-            unlinkSync(`${__dirname}/cache/thumb_${idx + 1}.jpg`);
-          } catch { }
-        });
+        // حذف الصور المؤقتة بعد 10 ثواني
+        setTimeout(() => {
+          attachments.forEach((file, idx) => {
+            try {
+              unlinkSync(`${__dirname}/cache/thumb_${idx + 1}.jpg`);
+            } catch { }
+          });
+        }, 10000);
       },
       event.messageID
     );
 
   } catch (err) {
+    console.error(err);
     api.sendMessage(`⛔ | حدث خطأ أثناء البحث: ${err.message}`, event.threadID, event.messageID);
   }
 };
